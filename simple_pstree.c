@@ -90,6 +90,7 @@ int main(int argc, char **argv)
     err = bind(netlink_socket, (struct sockaddr *)&src_addr, sizeof(src_addr));
     if (err == -1 ) {
         perror( "bind failed\n" );
+        close(netlink_socket);
         return -1;
     }
 
@@ -104,9 +105,33 @@ int main(int argc, char **argv)
                  (socklen_t)sizeof(dst_addr));
     if (err == -1 ) {
         perror( "sendto failed\n" );
+        close(netlink_socket);
         return - 1 ;
     }
 
+    struct msghdr rc_msg; //received message
+    struct nlmsghdr *nlh = NULL;
+    nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(4096));
+    if(!nlh) {
+        perror( "malloc nlmsghdr failed\n");
+        close(netlink_socket);
+        return -1;
+    }
+    memset(nlh,0,NLMSG_SPACE(4096));
+
+    //err = recvmsg(netlink_socket, &rc_msg, 0);
+    err = recvfrom(netlink_socket, nlh, NLMSG_LENGTH(4096),0,NULL,NULL);
+    if (err == -1) {
+        perror( "receive failed\n");
+        close(netlink_socket);
+        return -1;
+    }
+    printf("Received message: %s\n",(char *) NLMSG_DATA(nlh));
+    memset(nlh,0,NLMSG_SPACE(4096));
+
+
+
+    close(netlink_socket);
     return 0;
 
 }

@@ -7,14 +7,47 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/sched.h>
-
+#include <linux/socket.h>
 
 #define MY_NETLINK_TYPE 17
+#define MAX_MSGSIZE 4096
+
+MODULE_LICENSE("Dual BSD/GPL");
+
+struct sock *my_nl_sock = NULL ;
 
 struct ts_list {
     struct ts_list *prev, *next;
     struct task_struct *task;
 };
+
+void send_to_user(char msg[], int pid)
+{
+    struct sk_buff *skb_1;
+    struct nlmsghdr *nlh;
+    int len = NLMSG_SPACE(MAX_MSGSIZE);
+    int slen = 0;
+
+    if(!msg || !my_nl_sock) {
+        return ;
+    }
+    //printk(KERN_ERR "pid:%d\n",pid);
+    skb_1 = alloc_skb(len,GFP_KERNEL);
+
+    if(!skb_1) {
+        printk(KERN_ERR "my_net_link:alloc_skb error\n");
+    }
+
+    for(slen = 0; msg[slen] != '\0'; ++slen);//count size of msg
+
+    nlh = __nlmsg_put(skb_1,0,0,0,MAX_MSGSIZE,0);
+    NETLINK_CB(skb_1).portid = 0;
+    NETLINK_CB(skb_1).dst_group = 0;
+    msg[slen]= '\0';
+    memcpy(NLMSG_DATA(nlh),msg,slen+1);
+    pr_info("my_net_link:send message '%s'.\n",(char *)NLMSG_DATA(nlh));
+    netlink_unicast(my_nl_sock,skb_1,pid,MSG_DONTWAIT);
+}
 
 static void my_find_children(struct list_head *pos, struct list_head *head, int count)
 {
@@ -39,9 +72,6 @@ static void my_find_children(struct list_head *pos, struct list_head *head, int 
 }
 
 
-MODULE_LICENSE("Dual BSD/GPL");
-
-struct  sock *my_nl_sock = NULL ;
 static  void  nl_input (struct sk_buff *skb)
 {
 
@@ -146,6 +176,9 @@ static  void  nl_input (struct sk_buff *skb)
 
     }
 
+    char test_msg[64] = "hello, user\n";
+    send_to_user(test_msg, NETLINK_CB(skb).portid);
+
 
     pr_info( "====================\n" );
 }
@@ -164,6 +197,11 @@ static int my_init(void)
         pr_info( "====================\n" );
         return -1;
     }
+
+
+
+
+
 
     pr_info( "====================\n" );
 
