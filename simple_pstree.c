@@ -7,15 +7,16 @@
 #include <linux/netlink.h>
 
 #define MY_NETLINK_TYPE 17
+#define MAX_PAYLOAD 32768
 
 int main(int argc, char **argv)
 {
     int cmd_opt = 0;
     char* msg = malloc(8); //max = 8
-    char tmp[32];
+    char tmp[32] = {};
     cmd_opt = getopt(argc, argv, "c::s::p::");
 
-    printf("My pid = %d\n", getpid() );
+    //printf("My pid = %d\n", getpid() );
 
     switch(cmd_opt) {
     default:
@@ -25,10 +26,10 @@ int main(int argc, char **argv)
             tmp[0] = 'c';
             tmp[1] = ' ';
             msg = strcat(tmp, optarg);
-            printf("%s\n", msg);
+            //printf("%s\n", msg);
         } else {
             msg = "c 1";
-            printf("%s\n", msg);
+            //printf("%s\n", msg);
         }
         break;
     case 's':
@@ -36,14 +37,14 @@ int main(int argc, char **argv)
             tmp[0] = 's';
             tmp[1] = ' ';
             msg = strcat(tmp, optarg);
-            printf("%s\n", msg);
+            //printf("%s\n", msg);
         } else {
             sprintf(msg, "%d", getpid()); //int to string
             tmp[0] = 's';
             tmp[1] = ' ';
             strcat(tmp, msg);
             msg = tmp;
-            printf("%s\n", msg);
+            //printf("%s\n", msg);
         }
         break;
     case 'p':
@@ -51,14 +52,14 @@ int main(int argc, char **argv)
             tmp[0] = 'p';
             tmp[1] = ' ';
             msg = strcat(tmp, optarg);
-            printf("%s\n", msg);
+            //printf("%s\n", msg);
         } else {
             sprintf(msg, "%d", getpid());
             tmp[0] = 'p';
             tmp[1] = ' ';
             strcat(tmp, msg);
             msg = tmp;
-            printf("%s\n", msg);
+            //printf("%s\n", msg);
         }
         break;
     }
@@ -111,23 +112,23 @@ int main(int argc, char **argv)
 
     struct msghdr rc_msg; //received message
     struct nlmsghdr *nlh = NULL;
-    nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(4096));
+    nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(MAX_PAYLOAD));
     if(!nlh) {
         perror( "malloc nlmsghdr failed\n");
         close(netlink_socket);
         return -1;
     }
-    memset(nlh,0,NLMSG_SPACE(4096));
+    memset(nlh,0,NLMSG_SPACE(MAX_PAYLOAD));
 
     //err = recvmsg(netlink_socket, &rc_msg, 0);
-    err = recvfrom(netlink_socket, nlh, NLMSG_LENGTH(4096),0,NULL,NULL);
+    err = recvfrom(netlink_socket, nlh, NLMSG_LENGTH(MAX_PAYLOAD),0,NULL,NULL);
     if (err == -1) {
         perror( "receive failed\n");
         close(netlink_socket);
         return -1;
     }
-    printf("Received message: %s\n",(char *) NLMSG_DATA(nlh));
-    memset(nlh,0,NLMSG_SPACE(4096));
+    printf("%s",(char *) NLMSG_DATA(nlh));
+    memset(nlh,0,NLMSG_SPACE(MAX_PAYLOAD));
 
 
 

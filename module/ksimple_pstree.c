@@ -10,11 +10,15 @@
 #include <linux/socket.h>
 
 #define MY_NETLINK_TYPE 17
-#define MAX_MSGSIZE 4096
+#define MAX_MSGSIZE 32768
 
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct sock *my_nl_sock = NULL ;
+
+char msg_to_send[32768] = {};
+int msg_end = 0;
+
 
 struct ts_list {
     struct ts_list *prev, *next;
@@ -45,7 +49,7 @@ void send_to_user(char msg[], int pid)
     NETLINK_CB(skb_1).dst_group = 0;
     msg[slen]= '\0';
     memcpy(NLMSG_DATA(nlh),msg,slen+1);
-    pr_info("my_net_link:send message '%s'.\n",(char *)NLMSG_DATA(nlh));
+    //pr_info("my_net_link:send message '%s'.\n",(char *)NLMSG_DATA(nlh));
     netlink_unicast(my_nl_sock,skb_1,pid,MSG_DONTWAIT);
 }
 
@@ -56,13 +60,29 @@ static void my_find_children(struct list_head *pos, struct list_head *head, int 
         now_task = list_entry(pos, struct task_struct, sibling);
 
         int i;
-        char blank[64]= {};
+        char cp_pr[64]= {}; //completed process name (blank + process)
         char *four_blank = "    ";
+        char pid_str[5] = {};
+
         for(i = 0; i < count; ++i) {
-            strcat(blank, four_blank);
+            strcat(cp_pr, four_blank);
         }
-        if(pos -> next != pos ) {
-            pr_info( "%s%s(%d)\n", blank, now_task -> comm, now_task -> pid);
+
+        if(now_task -> pid != 0) { //may have problem, but so far so good
+            pr_info( "%s%s(%d)\n", cp_pr, now_task -> comm, now_task -> pid);
+            strcat(cp_pr, now_task -> comm);
+            for(i = 0; cp_pr[i] != '\0'; i++) {
+                msg_to_send[msg_end++] = cp_pr[i];
+            }
+            msg_to_send[msg_end++] = '(';
+            sprintf(pid_str, "%d", now_task->pid);
+
+            for(i = 0; pid_str[i] != '\0'; i++) {
+                msg_to_send[msg_end++] = pid_str[i];
+            }
+            msg_to_send[msg_end++] = ')';
+            msg_to_send[msg_end++] = '\n';
+
         } else {
             return;
         }
@@ -71,6 +91,38 @@ static void my_find_children(struct list_head *pos, struct list_head *head, int 
 
 }
 
+//prepare to delete
+void mode_s(char msg_to_send[], struct list_head *head)
+{
+    int i;
+    //int msg_end = 0;
+    char pid_str[5] = {};
+    struct list_head *my_sibling = NULL;
+    struct task_struct *now_task;
+
+    list_for_each(my_sibling, head) {
+        now_task = list_entry(my_sibling, struct task_struct, sibling);
+        if(now_task -> pid != 0) {
+            pr_info( "%s(%d)\n",now_task -> comm, now_task -> pid);
+            //} else {
+            //break;
+
+            for(i = 0; now_task->comm[i] != '\0'; i++) {
+                msg_to_send[msg_end++] = now_task->comm[i];
+            }
+            msg_to_send[msg_end++] = '(';
+            sprintf(pid_str, "%d", now_task->pid);
+
+            for(i = 0; pid_str[i] != '\0'; i++) {
+                msg_to_send[msg_end++] = pid_str[i];
+            }
+            msg_to_send[msg_end++] = ')';
+            msg_to_send[msg_end++] = '\n';
+
+        }
+    }
+
+}
 
 static  void  nl_input (struct sk_buff *skb)
 {
@@ -113,30 +165,74 @@ static  void  nl_input (struct sk_buff *skb)
     my_pid_task = pid_task(pid_struct, PIDTYPE_PID);
 
     int i;
-    char blank[64]= {};
-
+    char blank[64] = {};
     char *four_blank = "    ";
+    char pid_str[5] = {};
+
     struct ts_list *p_list, *now_list;
     struct list_head *my_child = NULL,
                           *my_sibling = NULL;
     struct task_struct *now_task;
     p_list = kmalloc(32, GFP_KERNEL );
     now_list = kmalloc(32, GFP_KERNEL );
+
+    //clean msg
+    for(i = 0; i < msg_end; i++) {
+        msg_to_send[i] = '\0';
+    }
+    msg_end = 0;
+
     switch(mode) {
     case 'c':
         pr_info( "%s(%d)\n", my_pid_task -> comm, my_pid_task -> pid);
+
+        for(i = 0; my_pid_task->comm[i] != '\0'; i++) {
+            msg_to_send[msg_end++] = my_pid_task->comm[i];
+        }
+        msg_to_send[msg_end++] = '(';
+        sprintf(pid_str, "%d", my_pid_task->pid);
+
+        for(i = 0; pid_str[i] != '\0'; i++) {
+            msg_to_send[msg_end++] = pid_str[i];
+        }
+        msg_to_send[msg_end++] = ')';
+        msg_to_send[msg_end++] = '\n';
+
         my_find_children(my_child, &my_pid_task->children, 1);
 
         break;
     case 's':
-
+        //mode_s(msg_to_send, &my_pid_task->sibling);
         //pr_info("pid_task:%d\n", my_pid_task->pid);
         list_for_each(my_sibling, &my_pid_task->sibling) {
             now_task = list_entry(my_sibling, struct task_struct, sibling);
-            if(now_task -> pid != 0) {
+
+            if(now_task -> pid < 100000 && now_task -> pid > 0) {
                 pr_info( "%s(%d)\n",now_task -> comm, now_task -> pid);
                 //} else {
                 //break;
+
+                for(i = 0; now_task->comm[i] != '\0'; i++) {
+                    msg_to_send[msg_end++] = now_task->comm[i];
+                    /*if(i == 15){
+                    break;
+                    }*/
+                }
+                //pr_info("i = %d\n", i);
+                msg_to_send[msg_end++] = '(';
+                sprintf(pid_str, "%d", now_task->pid);
+                //pr_info("pid_str:%saaa\n", pid_str);
+
+                for(i = 0; pid_str[i] != '\0'; i++) {
+                    msg_to_send[msg_end++] = pid_str[i];
+                    /*if(i == 5){
+                    break;
+                    }*/
+                }
+                //pr_info("i = %d\n", i);
+                msg_to_send[msg_end++] = ')';
+                msg_to_send[msg_end++] = '\n';
+
             }
         }
         break;
@@ -145,8 +241,8 @@ static  void  nl_input (struct sk_buff *skb)
         p_list -> task = my_pid_task;
         now_list = p_list;
         now_task = my_pid_task;
-        for(i = 0; i < 5; i++) {
-
+        //for(i = 0; i < 5; i++) {
+        while(1) {
             struct ts_list *new_list;
             new_list = kmalloc(32, GFP_KERNEL );
 
@@ -162,14 +258,43 @@ static  void  nl_input (struct sk_buff *skb)
             now_task = now_task -> parent;
         }
 
+        for(i = 0; now_list->task->comm[i] != '\0'; i++) {
+            msg_to_send[msg_end++] = now_list->task->comm[i];
+        }
+        msg_to_send[msg_end++] = '(';
+        sprintf(pid_str, "%d", now_list->task->pid);
+
+        for(i = 0; pid_str[i] != '\0'; i++) {
+            msg_to_send[msg_end++] = pid_str[i];
+        }
+        msg_to_send[msg_end++] = ')';
+        msg_to_send[msg_end++] = '\n';
+
         pr_info( "%s(%d)\n", now_list->task->comm, now_list->task->pid);
         now_list = now_list -> prev;
-        for(i = 0; i < 5; i++) {
+        //for(i = 0; i < 5; i++) {
+        while(1) {
+            char tmp[64] = {};
             strcat(blank, four_blank);
             pr_info( "%s%s(%d)\n", blank, now_list->task->comm, now_list->task->pid);
+            strcat(tmp, blank);
+            strcat(tmp, now_list -> task -> comm);
+            for(i = 0; tmp[i] != '\0'; i++) {
+                msg_to_send[msg_end++] = tmp[i];
+            }
+            msg_to_send[msg_end++] = '(';
+            sprintf(pid_str, "%d", now_list->task->pid);
+
+            for(i = 0; pid_str[i] != '\0'; i++) {
+                msg_to_send[msg_end++] = pid_str[i];
+            }
+            msg_to_send[msg_end++] = ')';
+            msg_to_send[msg_end++] = '\n';
+
             if(now_list == p_list) {
                 break;
             }
+
             now_list = now_list -> prev;
         }
         break;
@@ -177,7 +302,7 @@ static  void  nl_input (struct sk_buff *skb)
     }
 
     char test_msg[64] = "hello, user\n";
-    send_to_user(test_msg, NETLINK_CB(skb).portid);
+    send_to_user(msg_to_send, NETLINK_CB(skb).portid);
 
 
     pr_info( "====================\n" );
