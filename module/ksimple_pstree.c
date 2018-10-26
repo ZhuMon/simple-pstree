@@ -8,18 +8,36 @@
 #include <linux/netdevice.h>
 #include <linux/sched.h>
 
+
 #define MY_NETLINK_TYPE 17
-/*
-   struct pid
-   {
-	atomic_t count;
-	unsigned int level;
-	// lists of tasks that use this pid
-	struct hlist_head tasks[PIDTYPE_MAX];
-	struct rcu_head rcu;
-	struct upid numbers[1];
-    };
- */
+
+struct ts_list {
+    struct ts_list *prev, *next;
+    struct task_struct *task;
+};
+
+static void my_find_children(struct list_head *pos, struct list_head *head, int count)
+{
+    struct task_struct *now_task;
+    list_for_each(pos, head) {
+        now_task = list_entry(pos, struct task_struct, sibling);
+
+        int i;
+        char blank[64]= {};
+        char *four_blank = "    ";
+        for(i = 0; i < count; ++i) {
+            strcat(blank, four_blank);
+        }
+        if(pos -> next != pos ) {
+            pr_info( "%s%s(%d)\n", blank, now_task -> comm, now_task -> pid);
+        } else {
+            return;
+        }
+        my_find_children(pos, &now_task->children, count+1);
+    }
+
+}
+
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -64,53 +82,65 @@ static  void  nl_input (struct sk_buff *skb)
 
     my_pid_task = pid_task(pid_struct, PIDTYPE_PID);
 
-    struct list_head *my_child, *my_sibling;
+    int i;
+    char blank[64]= {};
+
+    char *four_blank = "    ";
+    struct ts_list *p_list, *now_list;
+    struct list_head *my_child = NULL,
+                          *my_sibling = NULL;
     struct task_struct *now_task;
+    p_list = kmalloc(32, GFP_KERNEL );
+    now_list = kmalloc(32, GFP_KERNEL );
     switch(mode) {
     case 'c':
-        //list_for_each(my_child, &my_pid_task->children);
-        list_for_each(my_child, &my_pid_task->children) {
-            now_task = list_entry(my_child, struct task_struct, children);
-            if(my_child -> next != my_child) {
-                pr_info( "%s(%d)\n",now_task -> comm, now_task -> pid);
-            }
-        }
-        //my_child = my_pid_task -> children ->next;
-        //if(my_child == &my_pid_task -> children){
-        //	pr_info("fuck\n");
-        //}
-        //now_task = list_entry(my_child, struct task_struct, children);
-        //pr_info( "%s(%d)\n",my_pid_task -> comm, my_pid_task-> pid);
-
-        //pr_info( "%s(%d)\n",now_task -> comm, now_task -> pid);
+        pr_info( "%s(%d)\n", my_pid_task -> comm, my_pid_task -> pid);
+        my_find_children(my_child, &my_pid_task->children, 1);
 
         break;
     case 's':
-        //list_for_each(my_sibling, &my_pid_task->sibling);
-        //now_task = list_entry(my_sibling, struct task_struct, sibling);
-        //pr_info( "%s(%d)\n",my_pid_task->comm, my_pid_task->pid);
-        //pr_info( "%s(%d)\n",now_task ->comm, now_task->pid);
 
-        list_for_each(my_sibling, my_pid_task->sibling.prev) {
+        //pr_info("pid_task:%d\n", my_pid_task->pid);
+        list_for_each(my_sibling, &my_pid_task->sibling) {
             now_task = list_entry(my_sibling, struct task_struct, sibling);
-            if(my_sibling -> next != my_sibling) {
+            if(now_task -> pid != 0) {
                 pr_info( "%s(%d)\n",now_task -> comm, now_task -> pid);
+                //} else {
+                //break;
             }
         }
         break;
     case 'p':
-        now_task = my_pid_task -> parent;
-        int i;
-        char blank[64];
-        char *four_blank = "    ";
+
+        p_list -> task = my_pid_task;
+        now_list = p_list;
+        now_task = my_pid_task;
         for(i = 0; i < 5; i++) {
-            //pr_info( "%s(%d)\n",my_pid_task->comm, my_pid_task->pid);
-            pr_info( "%s%s(%d)\n",blank, now_task ->comm, now_task->pid);
+
+            struct ts_list *new_list;
+            new_list = kmalloc(32, GFP_KERNEL );
+
+            now_list -> next = new_list;
+            new_list -> prev = now_list;
+            new_list -> task = now_task -> parent;
+
             if(now_task -> pid == 1) {
                 break;
             }
+
+            now_list = new_list;
             now_task = now_task -> parent;
+        }
+
+        pr_info( "%s(%d)\n", now_list->task->comm, now_list->task->pid);
+        now_list = now_list -> prev;
+        for(i = 0; i < 5; i++) {
             strcat(blank, four_blank);
+            pr_info( "%s%s(%d)\n", blank, now_list->task->comm, now_list->task->pid);
+            if(now_list == p_list) {
+                break;
+            }
+            now_list = now_list -> prev;
         }
         break;
 
