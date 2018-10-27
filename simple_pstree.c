@@ -1,13 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <linux/netlink.h>
-
-#define MY_NETLINK_TYPE 17
-#define MAX_PAYLOAD 32768
+#include "simple_pstree.h"
 
 int main(int argc, char **argv)
 {
@@ -20,6 +11,9 @@ int main(int argc, char **argv)
 
     switch(cmd_opt) {
     default:
+        if(argc != 1) {
+            break;
+        }
     case 'c':
         if(optarg) {
 
@@ -73,15 +67,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    /*
-    struct  sockaddr_nl {
-    __kernel_sa_family_t     nl_family;   // AF_NETLINK
-    unsigned short		 nl_pad;      // zero
-    __u32			 nl_pid;      // port ID
-    __u32			 nl_groups;   // multicast groups mask
-    };
-    */
-
     memset(&src_addr, 0, sizeof(src_addr));
     src_addr.nl_family = AF_NETLINK;
     src_addr.nl_pad    = 0 ;
@@ -110,7 +95,6 @@ int main(int argc, char **argv)
         return - 1 ;
     }
 
-    struct msghdr rc_msg; //received message
     struct nlmsghdr *nlh = NULL;
     nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(MAX_PAYLOAD));
     if(!nlh) {
