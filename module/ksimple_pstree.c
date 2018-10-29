@@ -186,11 +186,16 @@ static  void  nl_input (struct sk_buff *skb)
         }
         break;
     case 'p':
-
         p_list -> task = my_pid_task;
         now_list = p_list;
         now_task = my_pid_task;
-        //for(i = 0; i < 5; i++) {
+
+        if(my_pid_task -> pid == 1) {
+            p_list -> next = p_list;
+            p_list -> prev = p_list;
+            goto flag;
+        }
+
         while(1) {
             struct ts_list *new_list;
             new_list = kmalloc(32, GFP_KERNEL );
@@ -207,6 +212,7 @@ static  void  nl_input (struct sk_buff *skb)
             now_task = now_task -> parent;
         }
 
+flag:
         for(i = 0; now_list->task->comm[i] != '\0'; i++) {
             msg_to_send[msg_end++] = now_list->task->comm[i];
         }
@@ -220,17 +226,20 @@ static  void  nl_input (struct sk_buff *skb)
         msg_to_send[msg_end++] = '\n';
 
         pr_info( "%s(%d)\n", now_list->task->comm, now_list->task->pid);
-        now_list = now_list -> prev;
-        //for(i = 0; i < 5; i++) {
-        while(1) {
+
+        while(now_list != p_list) {
             char tmp[64] = {};
+
+            now_list = now_list -> prev;
             strcat(blank, four_blank);
             pr_info( "%s%s(%d)\n", blank, now_list->task->comm, now_list->task->pid);
             strcat(tmp, blank);
             strcat(tmp, now_list -> task -> comm);
+
             for(i = 0; tmp[i] != '\0'; i++) {
                 msg_to_send[msg_end++] = tmp[i];
             }
+
             msg_to_send[msg_end++] = '(';
             sprintf(pid_str, "%d", now_list->task->pid);
 
@@ -240,11 +249,11 @@ static  void  nl_input (struct sk_buff *skb)
             msg_to_send[msg_end++] = ')';
             msg_to_send[msg_end++] = '\n';
 
-            if(now_list == p_list) {
+            /*if(now_list == p_list) {
                 break;
             }
 
-            now_list = now_list -> prev;
+            now_list = now_list -> prev;*/
         }
         break;
 
