@@ -110,6 +110,12 @@ static  void  nl_input (struct sk_buff *skb)
     if(!kstrtoint(skb->data, 0, &rc_pid)) {
         pr_info( "kstrtoint success:%d\n", rc_pid);
         pid_struct = find_get_pid(rc_pid);
+        if(!pid_struct) {
+            pr_info( "No such pid\n");
+            send_to_user(msg_to_send, NETLINK_CB(skb).portid);
+            pr_info( "====================\n" );
+            return;
+        }
     } else {
         pr_info( "kstrtoint failed\n");
     }
