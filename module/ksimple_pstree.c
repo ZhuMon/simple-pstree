@@ -190,7 +190,7 @@ static  void  nl_input (struct sk_buff *skb)
         now_list = p_list;
         now_task = my_pid_task;
 
-        if(my_pid_task -> pid == 1) {
+        if(my_pid_task -> parent -> pid == 0) {
             p_list -> next = p_list;
             p_list -> prev = p_list;
             goto flag;
@@ -204,7 +204,7 @@ static  void  nl_input (struct sk_buff *skb)
             new_list -> prev = now_list;
             new_list -> task = now_task -> parent;
 
-            if(now_task -> pid == 1) {
+            if(now_task -> parent -> pid == 0) {
                 break;
             }
 
