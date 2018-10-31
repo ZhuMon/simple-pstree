@@ -34,10 +34,11 @@ void send_to_user(char msg[], int pid)
     netlink_unicast(my_nl_sock,skb_1,pid,MSG_DONTWAIT);
 }
 
-static void my_find_children(struct list_head *head, int count)
+static void my_find_children(struct task_struct *task, struct list_head *head, int count)
 {
     struct list_head *pos = NULL;
-    struct task_struct *now_task = NULL;
+    struct task_struct *now_task = NULL,
+                            *tmp_task = NULL;
 
     list_for_each(pos, head) {
         int i;
@@ -69,7 +70,12 @@ static void my_find_children(struct list_head *head, int count)
         } else {
             return;
         }
-        my_find_children(&now_task->children, count+1);
+        my_find_children(now_task, &now_task->children, count+1);
+
+        tmp_task = now_task;
+        while_each_thread(tmp_task, now_task) {
+            my_find_children(now_task, &now_task->children, count+1);
+        }
     }
 
 }
@@ -82,7 +88,9 @@ static  void  nl_input (struct sk_buff *skb)
 
     struct pid *pid_struct = NULL;
     struct task_struct *my_pid_task = NULL,
-                            *now_task = NULL;
+                            *now_task = NULL,
+                             *tmp_task = NULL,
+                              *now_child_task = NULL;
     struct ts_list *p_list = NULL,
                         *now_list = NULL;
     struct list_head *my_sibling = NULL;
@@ -147,7 +155,12 @@ static  void  nl_input (struct sk_buff *skb)
         msg_to_send[msg_end++] = ')';
         msg_to_send[msg_end++] = '\n';
 
-        my_find_children(&my_pid_task->children, 1);
+        my_find_children(my_pid_task, &my_pid_task->children, 1);
+
+        now_task = my_pid_task;
+        while_each_thread(my_pid_task, now_task) {
+            my_find_children(now_task, &now_task->children, 1);
+        }
 
         break;
     case 's':
@@ -157,7 +170,7 @@ static  void  nl_input (struct sk_buff *skb)
             now_task = list_entry(my_sibling, struct task_struct, sibling);
 
             if(now_task -> pid < 100000 && now_task -> pid > 0) {
-                pr_info( "%s(%d)\n",now_task -> comm, now_task -> pid);
+                pr_info( "%s(%d)\n", now_task -> comm, now_task -> pid);
                 //} else {
                 //break;
 
@@ -184,12 +197,46 @@ static  void  nl_input (struct sk_buff *skb)
 
             }
         }
+
+        int j = 0;
+        now_task = my_pid_task -> parent;
+        tmp_task = now_task;
+        while_each_thread(tmp_task, now_task) {
+            j = 0;
+            list_for_each(my_sibling, &now_task->children) {
+                now_child_task = list_entry(my_sibling, struct task_struct, sibling);
+                j++;
+                if(j == 5)
+                    break;
+                pr_info("j = %d\n", j);
+                if(now_child_task -> pid < 100000 && now_child_task -> pid > 0) {
+                    pr_info( "%s(%d)\n",now_child_task -> comm, now_child_task -> pid);
+
+                    for(i = 0; now_child_task->comm[i] != '\0'; i++) {
+                        msg_to_send[msg_end++] = now_child_task->comm[i];
+                    }
+                    //pr_info("i = %d\n", i);
+                    msg_to_send[msg_end++] = '(';
+                    sprintf(pid_str, "%d", now_child_task->pid);
+                    //pr_info("pid_str:%saaa\n", pid_str);
+
+                    for(i = 0; pid_str[i] != '\0'; i++) {
+                        msg_to_send[msg_end++] = pid_str[i];
+                    }
+                    //pr_info("i = %d\n", i);
+                    msg_to_send[msg_end++] = ')';
+                    msg_to_send[msg_end++] = '\n';
+
+                }
+            }
+        }
         break;
     case 'p':
         p_list -> task = my_pid_task;
         now_list = p_list;
         now_task = my_pid_task;
 
+        //pr_info("Group_leader:%d\n", my_pid_task->parent->group_leader->pid);
         if(my_pid_task -> parent -> pid == 0) {
             p_list -> next = p_list;
             p_list -> prev = p_list;
@@ -202,14 +249,24 @@ static  void  nl_input (struct sk_buff *skb)
 
             now_list -> next = new_list;
             new_list -> prev = now_list;
-            new_list -> task = now_task -> parent;
 
+            if(now_task -> parent -> pid == now_task -> parent -> group_leader -> pid) {
+                new_list -> task = now_task -> parent;
+            } else {
+                new_list -> task = now_task -> parent -> group_leader;
+            }
+
+            pr_info("Group_leader:%d\n", now_task->parent->group_leader->pid);
             if(now_task -> parent -> pid == 0) {
                 break;
             }
 
             now_list = new_list;
-            now_task = now_task -> parent;
+            if(now_task -> parent -> pid == now_task -> parent -> group_leader -> pid) {
+                now_task = now_task -> parent;
+            } else {
+                now_task = now_task -> parent -> group_leader;
+            }
         }
 
 flag:
