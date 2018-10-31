@@ -11,7 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/sched.h>
 #include <linux/socket.h>
-#include <linux/sched/signal.h>
+//#include <linux/sched/signal.h>
 
 #define MY_NETLINK_TYPE 17
 #define MAX_MSGSIZE 32768

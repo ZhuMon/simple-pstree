@@ -73,7 +73,8 @@ static void my_find_children(struct task_struct *task, struct list_head *head, i
         my_find_children(now_task, &now_task->children, count+1);
 
         tmp_task = now_task;
-        while_each_thread(tmp_task, now_task) {
+        //while_each_thread(tmp_task, now_task) {
+        while((now_task = list_entry(now_task->thread_group.next, struct task_struct, thread_group))!= tmp_task) {
             my_find_children(now_task, &now_task->children, count+1);
         }
     }
@@ -158,7 +159,8 @@ static  void  nl_input (struct sk_buff *skb)
         my_find_children(my_pid_task, &my_pid_task->children, 1);
 
         now_task = my_pid_task;
-        while_each_thread(my_pid_task, now_task) {
+        //while_each_thread(my_pid_task, now_task) {
+        while((now_task = list_entry(now_task->thread_group.next, struct task_struct, thread_group))!= my_pid_task) {
             my_find_children(now_task, &now_task->children, 1);
         }
 
@@ -201,7 +203,8 @@ static  void  nl_input (struct sk_buff *skb)
         int j = 0;
         now_task = my_pid_task -> parent;
         tmp_task = now_task;
-        while_each_thread(tmp_task, now_task) {
+        while((now_task = list_entry(now_task->thread_group.next, struct task_struct, thread_group))!= tmp_task) {
+            //while_each_thread(tmp_task, now_task) {
             j = 0;
             list_for_each(my_sibling, &now_task->children) {
                 now_child_task = list_entry(my_sibling, struct task_struct, sibling);
